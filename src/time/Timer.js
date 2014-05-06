@@ -14,15 +14,28 @@
 * @constructor
 * @param {Phaser.Game} game A reference to the currently running game.
 * @param {boolean} [autoDestroy=true] - A Timer that is set to automatically destroy itself will do so after all of its events have been dispatched (assuming no looping events).
+* @param {Phaser.Clock} clock The clock this timer is bound to.
 */
-Phaser.Timer = function (game, autoDestroy) {
+Phaser.Timer = function (game, autoDestroy, clock) {
 
     if (typeof autoDestroy === 'undefined') { autoDestroy = true; }
+
+    // Note: Phaser.time can be used to get the old behaviour as Time.clock is only used to access Time.clock.now.
+    if(!(clock instanceof Phaser.Clock) && !(clock instanceof Phaser.Time)) {
+        throw new TypeError("Phaser.Timer: clock is not an instance of Phaser.Clock");
+    }
+    // TODO: replace game.time by game.time.clock
+    if (typeof clock === 'undefined') { clock = game.time.clock; }
 
     /**
     * @property {Phaser.Game} game - Local reference to game.
     */
     this.game = game;
+
+    /**
+    * @property {Phaser.Clock} clock - The clock this timer is bound to.
+    */
+    this.clock = clock;
 
     /**
     * @property {boolean} running - True if the Timer is actively running. Do not switch this boolean, if you wish to pause the timer then use Timer.pause() instead.
@@ -66,7 +79,8 @@ Phaser.Timer = function (game, autoDestroy) {
     this.nextTick = 0;
 
     /**
-    * @property {number} timeCap - If the difference in time between two frame updates exceeds this value, the event times are reset to avoid catch-up situations.
+    * @property {number} timeCap - If the difference in time between two frame updates exceeds this value, the event times are reset
+    * @deprecated
     */
     this.timeCap = 1000;
 
@@ -74,12 +88,14 @@ Phaser.Timer = function (game, autoDestroy) {
     * @property {boolean} paused - The paused state of the Timer. You can pause the timer by calling Timer.pause() and Timer.resume() or by the game pausing.
     * @readonly
     * @default
+    * @deprecated
     */
     this.paused = false;
 
     /**
     * @property {boolean} _codePaused - Was the Timer paused by code or by Game focus loss?
     * @private
+    * @deprecated
     */
     this._codePaused = false;
 
@@ -93,12 +109,14 @@ Phaser.Timer = function (game, autoDestroy) {
     /**
     * @property {number} _pauseStarted - The time the game started being paused.
     * @private
+    * @deprecated
     */
     this._pauseStarted = 0;
 
     /**
     * @property {number} _pauseTotal - Total paused time.
     * @private
+    * @deprecated
     */
     this._pauseTotal = 0;
 
@@ -106,7 +124,7 @@ Phaser.Timer = function (game, autoDestroy) {
     * @property {number} _now - The current start-time adjusted time.
     * @private
     */
-    this._now = Date.now();
+    this._now = this.clock.now;
 
     /**
     * @property {number} _len - Temp. array length variable.
@@ -184,7 +202,7 @@ Phaser.Timer.prototype = {
 
         if (this._now === 0)
         {
-            tick += this.game.time.now;
+            tick += this.clock.now;
         }
         else
         {
@@ -272,7 +290,7 @@ Phaser.Timer.prototype = {
             return;
         }
 
-        this._started = this.game.time.now + (delay || 0);
+        this._started = this.clock.now + (delay || 0);
 
         this.running = true;
 
@@ -380,30 +398,33 @@ Phaser.Timer.prototype = {
     },
 
     /**
-    * The main Timer update event, called automatically by Phaser.Time.update.
+    * The main Timer update event. Call the callback of triggered events. This method is called automatically by the clock if the timer has been created using Phaser.Clock.create. Otherwise, you should call it yourself.
     *
     * @method Phaser.Timer#update
-    * @protected
-    * @param {number} time - The time from the core game clock.
     * @return {boolean} True if there are still events waiting to be dispatched, otherwise false if this Timer can be destroyed.
     */
-    update: function (time) {
+    update: function () {
+
+        if(arguments.length > 0) {
+            throw new RangeError("Phaser.Timer#update no longer takes an argument.");
+        }
 
         if (this.paused)
         {
             return true;
         }
 
-        this.elapsed = time - this._now;
-        this._now = time;
+        this.elapsed = this.clock.now - this._now;
+        this._now = this.clock.now;
 
         //  spike-dislike
+        // TODO: Remove this and the timeCap attribute. This should be handled by Time or Clock.
         if (this.elapsed > this.timeCap)
         {
             //  For some reason the time between now and the last time the game was updated was larger than our timeCap.
             //  This can happen if the Stage.disableVisibilityChange is true and you swap tabs, which makes the raf pause.
             //  In this case we need to adjust the TimerEvents and nextTick.
-            this.adjustEvents(time - this.elapsed);
+            this.adjustEvents(this.clock.now - this.elapsed);
         }
 
         this._marked = 0;
@@ -477,6 +498,7 @@ Phaser.Timer.prototype = {
     /**
     * Pauses the Timer and all events in the queue.
     * @method Phaser.Timer#pause
+    * @deprecated
     */
     pause: function () {
 
@@ -485,7 +507,7 @@ Phaser.Timer.prototype = {
             return;
         }
 
-        this._pauseStarted = this.game.time.now;
+        this._pauseStarted = this.clock.now;
 
         this.paused = true;
         this._codePaused = true;
@@ -496,6 +518,7 @@ Phaser.Timer.prototype = {
     * This is called by the core Game loop. Do not call it directly, instead use Timer.pause.
     * @method Phaser.Timer#_pause
     * @private
+    * @deprecated
     */
     _pause: function () {
 
@@ -504,7 +527,7 @@ Phaser.Timer.prototype = {
             return;
         }
 
-        this._pauseStarted = this.game.time.now;
+        this._pauseStarted = this.clock.now;
 
         this.paused = true;
 
@@ -551,6 +574,7 @@ Phaser.Timer.prototype = {
     * Resumes the Timer and updates all pending events.
     *
     * @method Phaser.Timer#resume
+    * @deprecated
     */
     resume: function () {
 
@@ -573,6 +597,7 @@ Phaser.Timer.prototype = {
     * This is called by the core Game loop. Do not call it directly, instead use Timer.pause.
     * @method Phaser.Timer#_resume
     * @private
+    * @deprecated
     */
     _resume: function () {
 

@@ -38,6 +38,16 @@ Phaser.Time = function (game) {
     this.elapsed = 0;
 
     /**
+    * @property {Phaser.Clock} scale - The "in-game time" clock.
+    */
+    this.clock = null;
+
+    /**
+    * @property {Phaser.Clock} scale - The game real-time clock.
+    */
+    this.realTimeClock = null;
+
+    /**
     * @property {number} pausedTime - Records how long the game has been paused for. Is reset each time the game pauses.
     * @protected
     */
@@ -113,8 +123,9 @@ Phaser.Time = function (game) {
 
     /**
     * @property {Phaser.Timer} events - This is a Phaser.Timer object bound to the master clock to which you can add timed events.
+    * TODO: This should really be this.clock.events, but We keep it like this to avoid API breaking bugs. Note that using this as the clock parameter allow to emulate the old way things work as Timer really only use clock.now.
     */
-    this.events = new Phaser.Timer(this.game, false);
+    this.events = new Phaser.Timer(this.game, false, this);
 
     /**
     * @property {number} _started - The time at which the Game instance started.
@@ -143,6 +154,7 @@ Phaser.Time = function (game) {
     /**
     * @property {array} _timers - Internal store of Phaser.Timer objects.
     * @private
+    * TODO: This should really be this.clock.timers, but We keep it like this to avoid API breaking bugs.
     */
     this._timers = [];
 
@@ -171,6 +183,12 @@ Phaser.Time.prototype = {
     boot: function () {
 
         this._started = Date.now();
+        this.clock = new Phaser.Clock(this.game);
+        this.realTimeClock = new Phaser.Clock(this.game);
+        // events should be an alias for clock.events. To avoid API breaking changes
+        // we keep it the old, unconsistant, way.
+//        this.events = this.clock.events;
+//        this._timers = this.clock._timers;
         this.events.start();
 
     },
@@ -181,12 +199,13 @@ Phaser.Time.prototype = {
     * @method Phaser.Time#create
     * @param {boolean} [autoDestroy=true] - A Timer that is set to automatically destroy itself will do so after all of its events have been dispatched (assuming no looping events).
     * @return {Phaser.Timer} The Timer object that was created.
+    * TODO: Remove this or just make it an alias for Time.clock.create.
     */
     create: function (autoDestroy) {
 
         if (typeof autoDestroy === 'undefined') { autoDestroy = true; }
 
-        var timer = new Phaser.Timer(this.game, autoDestroy);
+        var timer = new Phaser.Timer(this.game, autoDestroy, this);
 
         this._timers.push(timer);
 
@@ -198,6 +217,7 @@ Phaser.Time.prototype = {
     * Remove all Timer objects, regardless of their state. Also clears all Timers from the Time.events timer.
     *
     * @method Phaser.Time#removeAll
+    * TODO: Remove this or just make it an alias for Time.clock.removeAll.
     */
     removeAll: function () {
 
@@ -226,6 +246,8 @@ Phaser.Time.prototype = {
         this.timeToCall = this.game.math.max(0, 16 - (time - this.lastTime));
 
         this.elapsed = this.now - this.time;
+
+        this.realTimeClock.update(this.elapsed);
 
         //  spike-dislike
         if (this.elapsed > this.timeCap)
@@ -267,8 +289,11 @@ Phaser.Time.prototype = {
         //  Paused but still running?
         if (!this.game.paused)
         {
+            //  Game time === physics time !
+            this.clock.update(this.physicsElapsed * 1000);
+
             //  Our internal Phaser.Timer
-            this.events.update(this.now);
+            this.events.update();
 
             //  Any game level timers
             this._i = 0;
@@ -276,7 +301,7 @@ Phaser.Time.prototype = {
 
             while (this._i < this._len)
             {
-                if (this._timers[this._i].update(this.now))
+                if (this._timers[this._i].update())
                 {
                     this._i++;
                 }
@@ -301,6 +326,8 @@ Phaser.Time.prototype = {
 
         this._pauseStarted = this.now;
 
+        // TODO: remove all the following: pausing should just stop clocks, not all
+        // timers one-by-one.
         this.events.pause();
 
         var i = this._timers.length;
@@ -325,6 +352,8 @@ Phaser.Time.prototype = {
 
         this.pauseDuration = this.time - this._pauseStarted;
 
+        // TODO: remove all the following: pausing should just stop clocks, not all
+        // timers one-by-one.
         this.events.resume();
 
         var i = this._timers.length;

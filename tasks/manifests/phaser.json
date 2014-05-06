@@ -68,6 +68,7 @@
     "src/tween/Tween.js",
     "src/tween/Easing.js",
 
+    "src/time/Clock.js",
     "src/time/Time.js",
     "src/time/Timer.js",
     "src/time/TimerEvent.js",
